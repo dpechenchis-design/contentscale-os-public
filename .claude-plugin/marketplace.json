@@ -1,0 +1,16 @@
+{
+  "name": "contentscale",
+  "owner": {
+    "name": "ContentSCALE"
+  },
+  "plugins": [
+    {
+      "name": "contentscale",
+      "source": "./",
+      "description": "ContentSCALE OS for Content Managers"
+    }
+  ],
+  "metadata": {
+    "description": "ContentSCALE internal plugins for Content Managers"
+  }
+}

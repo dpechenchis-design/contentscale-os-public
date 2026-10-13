@@ -1,0 +1,5 @@
+platform,handle,role,followers,followers_source,competitor_source,approved
+tiktok,clienthandle,client,24.7k,tiktok.com/@clienthandle profile YYYY-MM-DD,,
+instagram,clienthandle,client,14k,instagram.com/clienthandle profile YYYY-MM-DD,,
+tiktok,competitor1,competitor,4.5M,tiktok.com/@competitor1 profile YYYY-MM-DD,named_by_client,
+instagram,competitor2,competitor,160k,instagram.com/competitor2 profile YYYY-MM-DD,ai_found,pending

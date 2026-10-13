@@ -1,0 +1,48 @@
+{
+  "client_name": "",
+  "slug": "",
+  "content_language": "en",
+  "sources": [
+    {"source_id": "U1", "type": "unpacking_call", "path_or_url": "", "date": "", "speakers": {"client": [], "agency": []}}
+  ],
+  "business": {
+    "offer": null,
+    "products": [{"name": "", "price": null, "url": null, "source_id": ""}],
+    "positioning": null,
+    "proof": [],
+    "differentiation": []
+  },
+  "audience": {
+    "segments": [{"name": "", "description": "", "source_id": ""}],
+    "pain_points": [],
+    "objections": [],
+    "core_objection": null,
+    "limiting_beliefs": [],
+    "desires": [],
+    "fears": [],
+    "buying_triggers": [],
+    "questions": [],
+    "not_ideal": []
+  },
+  "brand_voice": {"examples": [], "prohibited_claims": [], "notes": null},
+  "competitors_named_by_client": [{"name": "", "handle_or_url": null, "client_view": null, "source_id": ""}],
+  "competitors_referenced_on_client_site": [{"name": "", "source_id": "W1"}],
+  "accounts": {"instagram": null, "tiktok": null, "youtube": null, "other": []},
+  "platforms_requested": null,
+  "primary_platform": null,
+  "content_types_allowed": null,
+  "content_types_mentioned": [],
+  "posts_per_week": null,
+  "cadence_by_platform": [{"platform": "", "posts_per_week": null, "source_id": "", "note": null}],
+  "client_working_model": "UNKNOWN",
+  "working_model_evidence": [],
+  "new_recordings_allowed": null,
+  "recording_constraints": [],
+  "available_assets": [{"asset": "", "location": null, "status": "exists|promised|unknown", "source_id": ""}],
+  "conflicts": [{"field": "", "a": "", "b": "", "status": "CONFLICT"}],
+  "missing_critical_questions": [{"question": "", "blocks_stage": "research|strategy|calendar", "why": ""}],
+  "evidence_map": [
+    {"field": "", "claim": "", "source_id": "", "speaker": null, "timestamp": null, "quote": null, "kind": "QUOTE|FACT|SYNTHESIS", "attribution_note": null},
+    {"field": "", "claim": "", "source_id": "R1", "speaker": "customer review", "timestamp": "YYYY-MM-DD", "quote": "", "kind": "QUOTE", "review_id": 0, "rating": 5, "product": ""}
+  ]
+}
