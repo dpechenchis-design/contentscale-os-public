@@ -2,8 +2,8 @@
 """Write reference_records.json into the canonical research workbook.
 
 Usage:
-  python write_workbook.py <reference_records.json> <out.xlsx> [--include-below-ratio] [--include-outliers]
-  --include-outliers: also add posts with views >= 3x the account median (CM decision, e.g. huge brands)
+  python write_workbook.py <reference_records.json> <out.xlsx> [--include-below-ratio] [--include-exceptions]
+  --include-exceptions: also add EXCEPTION_1X / OUTLIER candidates (only flagged for accounts with < 5 posts at 2x; CM decision)
 
 - Starts from assets/research_template.xlsx (the team's real tabs and headers,
   plus the approved "Carousels" tab). Tabs are never renamed or removed.
@@ -131,7 +131,7 @@ def main(records_json, out_xlsx, include_below=False, include_outliers=False):
 
     def ok(r):
         return r.get('approval_gate') == 'OK' and (r.get('passes_ratio') is True or include_below
-                                                    or (include_outliers and r.get('viral_signal') == 'OUTLIER'))
+                                                    or (include_outliers and r.get('viral_signal') in ('OUTLIER', 'EXCEPTION_1X')))
 
     counts = {k: 0 for k in S}
     last_comp = {}
@@ -185,4 +185,4 @@ if __name__ == '__main__':
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     if len(args) != 2:
         sys.exit(__doc__)
-    main(*args, include_below='--include-below-ratio' in sys.argv, include_outliers='--include-outliers' in sys.argv)
+    main(*args, include_below='--include-below-ratio' in sys.argv, include_outliers='--include-exceptions' in sys.argv or '--include-outliers' in sys.argv)

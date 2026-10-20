@@ -129,6 +129,9 @@ def to_record(row, src_file):
     }
 
 
+MIN_PASSING = 5
+
+
 def main(exports_dir, accounts_csv, out_json, ratio=2.0, outlier=3.0):
     accounts = {}
     with open(accounts_csv, encoding='utf-8-sig', newline='') as f:
@@ -170,8 +173,7 @@ def main(exports_dir, accounts_csv, out_json, ratio=2.0, outlier=3.0):
         v, fo = r['views'], r['followers']
         r['views_to_followers'] = round(v / fo, 2) if v and fo else None
         r['passes_ratio'] = (v >= ratio * fo) if v is not None and fo else None
-        o = r.get('outlier_score')
-        r['viral_signal'] = 'RATIO' if r['passes_ratio'] else ('OUTLIER' if o is not None and o >= outlier else None)
+        r['viral_signal'] = 'RATIO' if r['passes_ratio'] else None
         r['eligibility_reason'] = (f'views {int(v):,} >= {ratio:g} x followers {int(fo):,}' if r['passes_ratio']
                                    else f'views {int(v):,} < {ratio:g} x followers {int(fo):,}' if r['passes_ratio'] is False
                                    else 'NO_DATA: views or followers missing')
@@ -180,9 +182,26 @@ def main(exports_dir, accounts_csv, out_json, ratio=2.0, outlier=3.0):
                  reaction_target_url=None, carousel_slides=None, asset_requirements=None,
                  approval_status='pending', used_status='No')
 
+    # Exception, not a rule: only for an account with < 5 posts passing the ratio.
+    # Candidates (views >= 1x followers, or >= outlier x account median) go to the CM; the 2x rule is never lowered otherwise.
+    passing = {}
+    for r in records:
+        k = (r['platform'], r['source_account'])
+        passing[k] = passing.get(k, 0) + (r['passes_ratio'] is True)
+    for r in records:
+        if r['passes_ratio'] is not False or passing[(r['platform'], r['source_account'])] >= MIN_PASSING:
+            continue
+        v, fo, o = r['views'], r['followers'], r.get('outlier_score')
+        if v and fo and v >= fo:
+            r['viral_signal'] = 'EXCEPTION_1X'
+            r['eligibility_reason'] += f'; EXCEPTION: account has < {MIN_PASSING} posts at {ratio:g}x, views >= 1x followers (CM decision)'
+        elif o is not None and o >= outlier:
+            r['viral_signal'] = 'OUTLIER'
+            r['eligibility_reason'] += f'; EXCEPTION: account has < {MIN_PASSING} posts at {ratio:g}x, views >= {outlier:g}x account median (CM decision)'
+
     records.sort(key=lambda r: (r['client_or_competitor'] or 'z', r['source_account'], -(r['views'] or 0)))
     meta = {'generated': dt.datetime.now().isoformat(timespec='seconds'), 'ratio_rule': f'views >= {ratio:g} x followers',
-            'outlier_rule': f'views >= {outlier:g} x account median (OUTLIER signal, needs CM decision)',
+            'exception_rule': f'only if an account has < {MIN_PASSING} posts at {ratio:g}x: views >= 1x followers (EXCEPTION_1X) or >= {outlier:g}x account median (OUTLIER); CM decides',
             'exports_dir': os.path.abspath(exports_dir), 'records': len(records)}
     json.dump({'meta': meta, 'records': records}, open(out_json, 'w', encoding='utf8'), ensure_ascii=False, indent=1)
 
@@ -191,13 +210,13 @@ def main(exports_dir, accounts_csv, out_json, ratio=2.0, outlier=3.0):
         k = (r['platform'], r['source_account'])
         b = by.setdefault(k, [0, 0, 0, 0, 0])
         b[0] += 1; b[1] += r['passes_ratio'] is True; b[2] += r['passes_ratio'] is None; b[3] += r['transcript_status'] == 'SORTFEED'
-        b[4] += r.get('viral_signal') == 'OUTLIER'
+        b[4] += r.get('viral_signal') in ('OUTLIER', 'EXCEPTION_1X')
     print(f'{len(records)} records -> {out_json}')
-    print('account | posts | pass ratio | outlier-only | no data | transcripts')
+    print('account | posts | pass ratio | exception candidates | no data | transcripts')
     for (pl, h), b in sorted(by.items()):
         print(f'  {pl}:@{h} | {b[0]} | {b[1]} | {b[4]} | {b[2]} | {b[3]}')
-        if b[1] < 5 and b[4]:
-            print(f'    NOTE: @{h} has <5 posts passing {ratio:g}x followers; {b[4]} outliers (>= {outlier:g}x median) are candidates -> ask CM (write_workbook --include-outliers)')
+        if b[1] < MIN_PASSING and b[4]:
+            print(f'    EXCEPTION: @{h} has < {MIN_PASSING} posts passing {ratio:g}x followers; {b[4]} candidates (>= 1x followers or >= {outlier:g}x median) -> ask CM, then write_workbook --include-exceptions')
     for f in skipped_files:
         print('WARN: no SortFeed rows recognised in', f)
     for pl, h in sorted(unknown_accounts):

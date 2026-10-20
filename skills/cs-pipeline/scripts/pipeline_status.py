@@ -69,6 +69,8 @@ def main(argv):
         s1 = f'DONE (Working Model {wm})'
         if wm == 'UNKNOWN':
             blockers.append('Working Model UNKNOWN: ask CM whether the client records new content')
+        if not has('onboarding_brief.md'):
+            blockers.append('onboarding_brief.md missing: team fills it from brain/onboarding_brief_template.md (materials, 5-source rule, Working Model)')
         if not has('client_rules.md'):
             blockers.append('client_rules.md missing: create from brain/client_rules_template.md')
         if 'dossier' not in G:

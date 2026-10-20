@@ -11,6 +11,7 @@
 | `banned_phrases.md` | Заборонені фрази й кліше рівня агенції | Будь-який клієнтський текст |
 | `creator_skills_sop.md` | SOP: як користуватися creator skills (load client → pick creator → generate → slot QC) | Коли скрипт пишеться за фреймворком, а не з референсу 1:1 |
 | `assets.md` | ID і посилання: майстер стратегії й резерви, еталонне досьє, схема Notion, тестові бази | Етапи 1, 3, 4 |
+| `onboarding_brief_template.md` | Онбординг-бриф: перелік матеріалів, правило 5 джерел, параметри, Client Working Model і її вплив на етапи | Етап 1, до старту роботи |
 | `client_rules_template.md` | Шаблон `clients/<slug>/client_rules.md` | Створити на етапі 1; поповнювати після кожної відповіді CM |
 
 Creator skills (dan-martell, personalbrandlaunch, jamesconole, nameisjoao, jun-yuh, roninxsocials, sharransrivatsaa-carousel, hormozi-leads), `sharrans-ai-slop` і `humanizer-ru` уже входять у плагін. Окремо їх встановлювати не треба (крок 1 SOP про `git clone` для плагіна не потрібен).
