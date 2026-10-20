@@ -33,7 +33,7 @@ description: >
                                                        CM «так» → pipeline_status.py --approve <gate>
 ```
 - Етап виконувати за інструкцією скіла етапу. Великі етапи (досьє, стратегія в Canva, день календаря) можна віддати субагенту `general-purpose` з повним посиланням на SKILL.md етапу, правилами клієнта й brain. Результат перевіряєш ти.
-- **Агент якості:** субагент `cs-quality-reviewer` (з плагіна) з параметрами `stage`, `client_dir`, `scope`, `brain_dir = $CS/cs-pipeline/brain`. Він лише читає й звітує.
+- **Агент якості:** субагент `cs-quality-reviewer` (з плагіна або з `~/.claude/agents` після встановлення з ZIP) з параметрами `stage`, `client_dir`, `scope`, `brain_dir = $CS/cs-pipeline/brain`. Він лише читає й звітує.
 - Після 2 кіл FIX без PASS → показати CM, що лишилося, з готовими варіантами. Не приховувати.
 - Gate ніколи не вважається пройденим без явного «так» CM у чаті. Погодження записується: `pipeline_status.py clients/<slug> --approve <gate> --note "<що саме погоджено>"`.
 
