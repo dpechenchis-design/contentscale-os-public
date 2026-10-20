@@ -37,4 +37,10 @@ if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v yt-dlp >/dev/null 2>&1; t
   echo "NOTE: install video tools once: brew install yt-dlp ffmpeg"
 fi
 [ -n "$CS_SKIP_SETUP" ] || sh "$DEST/skills/cs-pipeline/scripts/setup.sh" || echo "NOTE: tool setup did not finish; run again: sh $DEST/skills/cs-pipeline/scripts/setup.sh"
+echo ""
+echo "One more step for Instagram research (once per computer):"
+echo "  1. Install the Sort Feed extension in Chrome (sortfeed.com) and sign in with the team Pro account."
+echo "  2. Be signed in to Instagram in that Chrome."
+echo "  3. In Claude: + > Connectors > make sure SortFeed is on, then open a NEW session."
+echo "Without it the skill still works (slower Instagram via Chrome scrolling)."
 echo "Done. Restart Claude Code, then type: /contentscale <client name>"

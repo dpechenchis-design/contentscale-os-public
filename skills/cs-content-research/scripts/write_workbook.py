@@ -6,7 +6,10 @@ Usage:
   --include-exceptions: also add EXCEPTION_1X / OUTLIER candidates (only flagged for accounts with < 5 posts at 2x; CM decision)
 
 - Starts from assets/research_template.xlsx (the team's real tabs and headers,
-  plus the approved "Carousels" tab). Tabs are never renamed or removed.
+  plus the approved "Carousels" tab). Decision 2026-10-20: no separate BTS / Expert videos /
+  IG Competitors / Competitive analysis tabs; every video tab has a "Type" column instead
+  (Type from frames; "not classified" until the skill has checked the frames) and a "Transcript"
+  column next to each link (filled where a transcript exists). No "Accounts" tab.
 - If <out.xlsx> already exists, human-set "Approved?" / "Used?" values are kept
   for every link that is already there (a re-run never overwrites approvals).
 - "Approved?" is written only from approval_status set by a human
@@ -62,6 +65,34 @@ def existing_marks(path):
 def style_like(dst, src):
     dst.font = copy.copy(src.font); dst.fill = copy.copy(src.fill)
     dst.alignment = copy.copy(src.alignment); dst.border = copy.copy(src.border)
+
+
+VIDEO_TABS = ['Best performing content IG', 'Best performing content Tik Tok', 'Competitors (IG)', 'Competitors (Tik Tok)']
+DROP_TABS = ['BTS', 'Expert videos', 'IG Competitors', 'Competitive analysis']
+
+
+def transcript_label(r):
+    st = r.get('transcript_status')
+    if r.get('transcript') and st in ('WHISPER_LOCAL', 'SORTFEED', 'TIKTOK_CAPTIONS'):
+        return r['transcript']
+    return {'NO_SPEECH_OR_MUSIC': 'no speech (music only)', 'FOREIGN_OR_SONG': 'song only, no speech'}.get(st)
+
+
+def type_label(r):
+    return r.get('type') if r.get('type_status') == 'CLASSIFIED' else 'not classified'
+
+
+def add_type_column(ws):
+    """Insert 'Type' and 'Transcript' before 'Approved?'."""
+    for name, width in (('Transcript', 60), ('Type', 16)):
+        hdr = [c.value for c in ws[1]]
+        if name in hdr:
+            continue
+        i = hdr.index('Approved?') + 1 if 'Approved?' in hdr else len([h for h in hdr if h]) + 1
+        ws.insert_cols(i)
+        c = ws.cell(1, i, name)
+        style_like(c, ws.cell(1, i + 1))
+        ws.column_dimensions[c.column_letter].width = width
 
 
 class Sheet:
@@ -121,13 +152,38 @@ class Sheet:
             self.ws.add_data_validation(dv)
 
 
+def add_logic_sheets(wb, recs, ok):
+    """Read-only sheet for the reviewer: why each post is in the table."""
+    from openpyxl.styles import Font
+    for name in ('Why selected',):
+        if name in wb.sheetnames:
+            del wb[name]
+    ws = wb.create_sheet('Why selected')
+    hdr = ['Account', 'Platform', 'Role', 'Link', 'Views', 'Followers', 'Views / followers', 'Signal',
+           'Why selected', 'Type', 'Type evidence (frames)', 'Hook']
+    ws.append(hdr)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for r in recs:
+        if not ok(r):
+            continue
+        ws.append([r['source_account'], r['platform'], r.get('client_or_competitor'), r['reference_url'], r.get('views'),
+                   r.get('followers'), r.get('views_to_followers'),
+                   {'RATIO': '2x followers', 'EXCEPTION_1X': 'EXCEPTION (1x followers)', 'OUTLIER': 'EXCEPTION (3x median)'}.get(r.get('viral_signal'), ''),
+                   r.get('eligibility_reason'), r.get('type'), r.get('type_evidence'), r.get('hook')])
+        ws.cell(ws.max_row, 4).hyperlink = r['reference_url']
+
+
 def main(records_json, out_xlsx, include_below=False, include_outliers=False):
     recs = json.load(open(records_json, encoding='utf8'))['records']
     marks = existing_marks(out_xlsx)
     wb = load_workbook(TEMPLATE)
-    S = {t: Sheet(wb[t], 3 if t in ('BTS', 'Expert videos') else 1) for t in
-         ['Best performing content IG', 'Best performing content Tik Tok', 'Competitors (IG)',
-          'Competitors (Tik Tok)', 'Carousels', 'BTS', 'Expert videos']}
+    for name in DROP_TABS:
+        if name in wb.sheetnames:
+            del wb[name]
+    for name in VIDEO_TABS:
+        add_type_column(wb[name])
+    S = {t: Sheet(wb[t], 1) for t in VIDEO_TABS + ['Carousels']}
 
     def ok(r):
         return r.get('approval_gate') == 'OK' and (r.get('passes_ratio') is True or include_below
@@ -153,7 +209,7 @@ def main(records_json, out_xlsx, include_below=False, include_outliers=False):
         elif is_client:
             t = 'Best performing content Tik Tok' if r['platform'] == 'tiktok' else 'Best performing content IG'
             S[t].add({**base, 'Video link': r['reference_url'], 'Views on the video': r.get('views'),
-                      'Caption': r.get('caption')}, marks, t)
+                      'Caption': r.get('caption'), 'Type': type_label(r), 'Transcript': transcript_label(r)}, marks, t)
             counts[t] += 1
         else:
             t = 'Competitors (Tik Tok)' if r['platform'] == 'tiktok' else 'Competitors (IG)'
@@ -162,16 +218,11 @@ def main(records_json, out_xlsx, include_below=False, include_outliers=False):
             last_comp[t] = r['source_account']
             S[t].add({**base, 'Profile': r['source_account'], 'Reel': r['reference_url'], 'Likes': r.get('likes'),
                       'Comments': r.get('comments'), 'Views': r.get('views'), 'Shares': r.get('shares'),
-                      'Saves': r.get('saves'), 'Caption': r.get('caption')}, marks, t)
+                      'Saves': r.get('saves'), 'Caption': r.get('caption'), 'Type': type_label(r), 'Transcript': transcript_label(r)}, marks, t)
             counts[t] += 1
-        # format pools: BTS / Expert video references also listed in their own tabs
-        pool = {'BTS': 'BTS', 'Expert video': 'Expert videos'}.get(r.get('type'))
-        if pool:
-            S[pool].add({**base, 'Video link': r['reference_url'], 'HOOK': r.get('hook'),
-                         'Views on the video': r.get('views')}, marks, pool)
-            counts[pool] += 1
     for s in S.values():
         s.finish()
+    add_logic_sheets(wb, recs, ok)
     wb.save(out_xlsx)
     print(f'wrote {out_xlsx}')
     for k, v in counts.items():

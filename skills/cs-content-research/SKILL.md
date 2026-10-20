@@ -27,7 +27,7 @@ description: >
 1. Метрики беруться тільки з експорту SortFeed. Підписники — з профілю акаунта з датою. Немає числа → `null`, «віральним» не називати.
 2. Конкуренти з `competitors_named_by_client` не потребують погодження (якщо акаунт ідентифіковано однозначно). Конкурентів, знайдених AI, показати CM на approve/reject **до** роботи з їхнім контентом.
 3. `Approved?` у таблиці ставить лише людина. Скрипт його не заповнює й не перезаписує.
-4. Вкладки й назви колонок канонічної таблиці не змінюються. Єдине затверджене доповнення — вкладка `Carousels`.
+4. Вкладки таблиці (рішення 2026-10-20): `Best performing content IG / Tik Tok`, `Competitors (IG) / (Tik Tok)`, `Carousels`, плюс довідкова `Why selected`. Окремих вкладок BTS, Expert videos, IG Competitors, Competitive analysis, Accounts немає: у кожній вкладці з відео є колонки `Transcript` (біля кожного посилання, якщо транскрипт є) і `Type`.
 5. Type визначається за кадрами (`references/type_rules.md`), а не за транскриптом і не «на око» за назвою.
 6. Транскрипт: спочатку SortFeed (Transcribe), потім локальний Whisper. Якщо немає жодного → `TRANSCRIPT_MISSING`. Ніколи не писати «проаналізовано транскрипт», якщо його немає.
 
@@ -50,7 +50,16 @@ Research іде за заповненим брифом `references/research_brie
 - Список відео з метриками береться через `yt-dlp` (без завантаження відео); Outlier Score = перегляди / медіана акаунта.
 - Акаунт `FAILED` (TikTok щось змінив чи заблокував) → для нього SortFeed-експорт вручну (нижче).
 
-**Instagram: через браузер, безкоштовно (рішення 2026-10-13).** Відео й транскрипти відібраних рілсів: `fetch_media.py` з сесією Chrome CM (`--ig-cookies chrome`, за замовчуванням). Не вийшло → SortFeed Transcribe + «Download .txt» (кожне завантаження файлу CM підтверджує). Claude у Chrome CM читає сітку Reels (перегляди + підписники), відбирає віральні й відкриває лише їх, щоб узяти посилання. Інструкція: `references/instagram_browser_capture.md` → `ig_capture_to_csv.py` → `sources/auto/`.
+**Instagram: спершу SortFeed (конектор Claude), рішення 2026-10-20.** Перед збором перевірити SortFeed за `references/sortfeed_setup.md`: немає інструментів SortFeed у сесії або розширення не відповідає → показати CM кроки налаштування; CM не налаштовує зараз → запасний спосіб нижче. Встановити розширення за CM не можна, лише підказати.
+Як збирати через SortFeed (тест 2026-10-20: Competitor D, 500 рілсів за ~6 хв, 100 за 21 с; вручну було ~15 хв):
+1. `bridge_status` → Connected? Ні → кроки з `sortfeed_setup.md`.
+2. Для кожного IG-акаунта по черзі (не паралельно): `sort_profile(username, depth=500, sort_by=views, next_profile=<наступний>)`; якщо RUNNING → `sort_status(job_id)` до результату. Ліміт: 500 рілсів на профіль; бюджет Instagram 200 запитів/год (≈ 4 акаунти по 500).
+3. Повний CSV: з відповіді взяти посилання `https://mcp.sortfeed.com/csv/...` (діє 24 год) і зберегти `curl -s -o clients/<slug>/sources/auto/<handle>_ig_reels_sortfeed.csv <посилання>` (або `export_csv`). Формат = експорт SortFeed (Profile, Reel, Create Date, Views, Outlier Score, Likes, Comments), `ingest_sortfeed.py` читає без змін.
+4. SortFeed **не дає підписників** і транскриптів (масові транскрипти в конекторі «Soon»): підписники беруться з профілю (Claude у Chrome або CM) в `accounts.csv`; транскрипти й кадри — `fetch_media.py` для шортлиста.
+5. Помилка `No current window` = Chrome запущений без відкритого вікна → попросити CM відкрити звичайне вікно Chrome **з кількома вкладками** і повторити. У тесті 2026-10-20 після сортування вікно інколи зникало: тримати в ньому ще одну звичайну вкладку.
+6. Не покладатися на прокрутку сітки як на повний список: на examplebrand прокрутка бачила 32 рілси, SortFeed — 96 (11 віральних замість 7).
+
+**Instagram, запасний спосіб: через браузер, безкоштовно (рішення 2026-10-13).** Відео й транскрипти відібраних рілсів: `fetch_media.py` з сесією Chrome CM (`--ig-cookies chrome`, за замовчуванням). Не вийшло → SortFeed Transcribe + «Download .txt» (кожне завантаження файлу CM підтверджує). Claude у Chrome CM читає сітку Reels (перегляди + підписники), відбирає віральні й відкриває лише їх, щоб узяти посилання. Інструкція: `references/instagram_browser_capture.md` → `ig_capture_to_csv.py` → `sources/auto/`.
 Запасний варіант (браузер недоступний, Instagram просить вхід, акаунтів багато): SortFeed вручну:
 ```
 Для кожного IG-акаунта з accounts.csv:
@@ -72,7 +81,8 @@ Research іде за заповненим брифом `references/research_brie
 ### Крок 5. Shortlist і Type
 1. Для кожного дозволеного Type відібрати кандидатів серед `passes_ratio = true`: релевантність ніші й аудиторії клієнта, тема збігається з болями/запереченнями з контексту. Пріоритет — власні хіти клієнта.
 2. Для shortlist (не для всієї таблиці!) отримати кадри й транскрипт:
-   `~/.contentscale-venv/bin/python -I $CS/cs-content-research/scripts/fetch_media.py clients/<slug>/research/reference_records.json clients/<slug>/work --urls <url1> <url2> …`
+   `~/.contentscale-venv/bin/python -I $CS/cs-content-research/scripts/fetch_media.py clients/<slug>/research/reference_records.json clients/<slug>/work --workers 6 --mosaic --urls <url1> <url2> …`
+   Шортлист за замовчуванням: топ-10 віральних з кожного акаунта. Прискорення (2026-10-20): TikTok-транскрипт береться з власних субтитрів відео (~3 с, `TIKTOK_CAPTIONS`), Whisper лише для Instagram або відео без субтитрів; завантаження паралельні (`--workers`); `--mosaic` складає кадри 4 відео в одну картинку (`media/mosaics/`, порядок зверху вниз = `index.json`), тож Type визначається вчетверо швидше. 47 відео ≈ 6 хв.
 3. Каруселі: слайди за `references/carousel_capture.md`.
 4. Переглянути кадри (Read jpg) і заповнити за `references/type_rules.md`: `type`, `type_evidence`, `hook`, `asset_requirements`, для Expert video `reaction_target_url`, для Carousel `carousel_slides` (текст кожного слайду; кадри або скриншоти з браузера).
 4. **Existing Content Only** (`client_working_model = EXISTING_ONLY`): глибше пройти архів клієнта (довгі відео, подкасти, лайви). Референс брати лише тоді, коли його можна реалізувати без нових зйомок.
@@ -80,7 +90,7 @@ Research іде за заповненим брифом `references/research_brie
 
 ### Крок 6. Канонічна таблиця
 `~/.contentscale-venv/bin/python -I $CS/cs-content-research/scripts/write_workbook.py clients/<slug>/research/reference_records.json "clients/<slug>/research/<Client> research (IG+Tik Tok).xlsx"`
-- Власні пости → `Best performing content IG / Tik Tok`. Конкуренти → `Competitors (IG) / (Tik Tok)` блоками по акаунтах. BTS / Expert video → ще й у свої вкладки з HOOK. Каруселі → `Carousels`.
+- Власні пости → `Best performing content IG / Tik Tok`. Конкуренти → `Competitors (IG) / (Tik Tok)` блоками по акаунтах. Type кожного поста — у колонці `Type` (за кадрами; `not classified`, поки кадри не перевірені). Каруселі → `Carousels`.
 - Повторний запуск зберігає ручні `Approved?` / `Used?`.
 - Таблицю можна завантажити в Google Drive команди, якщо CM попросить (через Google Drive connector).
 

@@ -12,8 +12,10 @@ Usage:
 Per URL:
   1. yt-dlp downloads the public video into <work_dir>/media/<id>.mp4
   2. ffmpeg saves --frames evenly spaced JPG frames into <work_dir>/media/<id>/
-  3. if the record has no SortFeed transcript, faster-whisper transcribes locally
+  3. TikTok: the video's own captions via yt-dlp (~3 s, transcript_status = TIKTOK_CAPTIONS);
+     otherwise (Instagram, or no captions) faster-whisper transcribes locally
      (transcript_status = WHISPER_LOCAL); on failure -> TRANSCRIPT_MISSING
+  Downloads/frames run in parallel (--workers 4); --mosaic stacks 4 contact sheets per image for review.
   4. the video is deleted unless --keep-video
 Writes frame paths + transcript back into reference_records.json.
 Type is NOT decided here: the skill looks at the frames and sets type + type_evidence.
@@ -40,6 +42,48 @@ def duration(path):
         return None
 
 
+def tiktok_captions(url, media, vid):
+    """TikTok's own captions (creator or auto), when the video has them. Returns (text, timed) or None."""
+    base = os.path.join(media, f'{vid}.subs')
+    run(['yt-dlp', '-q', '--no-update', '--skip-download', '--write-subs', '--write-auto-subs',
+         '--sub-langs', 'eng.*,en.*', '--sub-format', 'vtt', '-o', base, url])
+    vtts = [f for f in os.listdir(media) if f.startswith(f'{vid}.subs') and f.endswith('.vtt')]
+    if not vtts:
+        return None
+    timed, cur = [], None
+    for line in open(os.path.join(media, vtts[0]), encoding='utf8', errors='ignore').read().splitlines():
+        m = re.match(r'(\d+):(\d+):(\d+)\.(\d+)\s+-->\s+(\d+):(\d+):(\d+)\.(\d+)', line)
+        if m:
+            g = [int(x) for x in m.groups()]
+            cur = [round(g[0] * 3600 + g[1] * 60 + g[2] + g[3] / 1000, 1), round(g[4] * 3600 + g[5] * 60 + g[6] + g[7] / 1000, 1), '']
+            timed.append(cur)
+        elif cur is not None and line.strip() and line.strip() != 'WEBVTT':
+            cur[2] = (cur[2] + ' ' + line.strip()).strip()
+    for f in vtts:
+        os.remove(os.path.join(media, f))
+    text = ' '.join(s[2] for s in timed).strip()
+    return (text, timed) if len(text.split()) >= 5 else None
+
+
+def make_mosaics(recs, work_dir, per=4):
+    """Stack contact sheets 4 per image (top to bottom = order in index.json), so Type review needs ~4x fewer images.
+    Plain ffmpeg (no drawtext/freetype needed): a yellow bar separates the sheets."""
+    out = os.path.join(work_dir, 'media', 'mosaics'); os.makedirs(out, exist_ok=True)
+    index = []
+    for n in range(0, len(recs), per):
+        grp = recs[n:n + per]
+        inputs, filt = [], []
+        for i, r in enumerate(grp):
+            inputs += ['-i', os.path.join(work_dir, r['contact_sheet'])]
+            filt.append(f'[{i}:v]scale=1092:-2,pad=iw:ih+14:0:14:yellow[v{i}]')
+        stack = (''.join(f'[v{i}]' for i in range(len(grp))) + f'vstack=inputs={len(grp)}') if len(grp) > 1 else '[v0]null'
+        path = os.path.join(out, f'mosaic_{n // per + 1:02d}.jpg')
+        run(['ffmpeg', '-y', '-loglevel', 'error'] + inputs + ['-filter_complex', ';'.join(filt) + ';' + stack, '-frames:v', '1', '-q:v', '4', path])
+        index.append({'mosaic': os.path.relpath(path, work_dir), 'items': [[n + i + 1, r['reference_url']] for i, r in enumerate(grp)]})
+    json.dump(index, open(os.path.join(out, 'index.json'), 'w'), indent=1)
+    print(f'{len(index)} mosaics -> {out} (top to bottom = order in index.json)')
+
+
 def main():
     ap = argparse.ArgumentParser(usage=__doc__)
     ap.add_argument('records'); ap.add_argument('work_dir')
@@ -47,6 +91,8 @@ def main():
     ap.add_argument('--frames', type=int, default=8)
     ap.add_argument('--model', default='small')
     ap.add_argument('--keep-video', action='store_true')
+    ap.add_argument('--workers', type=int, default=4, help='parallel downloads / frames (Whisper stays sequential)')
+    ap.add_argument('--mosaic', action='store_true', help='also write review mosaics: 4 contact sheets per image (fewer images to look at)')
     ap.add_argument('--lang', default='en', help="client's content language; other detected languages are treated as song/foreign audio")
     ap.add_argument('--ig-cookies', default='chrome',
                     help='browser[:profile] whose logged-in Instagram session yt-dlp uses for instagram.com URLs '
@@ -61,14 +107,20 @@ def main():
     media = os.path.join(a.work_dir, 'media'); os.makedirs(media, exist_ok=True)
     whisper = None
 
-    for url in a.urls:
+    def prepare(url):
+        """Download (small format), frames, contact sheet, TikTok's own captions. Safe to run in parallel."""
         rec = by_url.get(url)
         if rec is None:
-            print(f'SKIP not in records: {url}'); continue
+            return url, 'SKIP not in records'
         vid = vid_id(url)
         mp4 = os.path.join(media, f'{vid}.mp4')
+        if 'tiktok.com' in url and rec.get('transcript_status') not in ('SORTFEED', 'TIKTOK_CAPTIONS'):
+            sub = tiktok_captions(url, media, vid)  # ~3 s, no video download, no Whisper
+            if sub:
+                rec['transcript'], rec['transcript_timed'] = sub
+                rec['transcript_status'] = 'TIKTOK_CAPTIONS'
         if not os.path.exists(mp4):
-            cmd = ['yt-dlp', '-q', '--no-update', '--no-playlist', '-f', 'mp4/best', '-o', mp4]
+            cmd = ['yt-dlp', '-q', '--no-update', '--no-playlist', '-f', 'best[height<=720][ext=mp4]/mp4/best', '-o', mp4]
             if 'instagram.com' in url and a.ig_cookies.lower() != 'none':
                 cmd += ['--cookies-from-browser', a.ig_cookies]
             r = run(cmd + [url])
@@ -76,7 +128,7 @@ def main():
                 rec['media_status'] = 'DOWNLOAD_FAILED: ' + (r.stderr.strip().splitlines() or ['?'])[-1][:160]
                 if 'instagram.com' in url:
                     rec['media_status'] += ' | fallback: SortFeed Transcribe + Download .txt (CM confirms the download)'
-                print(f'FAIL download {url}: {rec["media_status"]}'); continue
+                return url, f'FAIL download: {rec["media_status"]}'
         d = duration(mp4)
         rec['duration_sec'] = round(d, 1) if d else None
         fdir = os.path.join(media, vid); os.makedirs(fdir, exist_ok=True)
@@ -95,7 +147,23 @@ def main():
             run(['ffmpeg', '-y', '-loglevel', 'error', '-pattern_type', 'glob', '-i', os.path.join(fdir, 'f*.jpg'),
                  '-vf', f'scale=270:-2,tile={cols}x{-(-len(frames) // cols)}:padding=4', '-frames:v', '1', sheet])
             rec['contact_sheet'] = os.path.relpath(sheet, a.work_dir) if os.path.exists(sheet) else None
-        if rec.get('transcript_status') != 'SORTFEED':
+        return url, None
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=a.workers) as ex:
+        results = dict(ex.map(prepare, a.urls))
+    for url, err in results.items():
+        if err:
+            print(f'{err.split(":")[0]} {url}: {err}')
+
+    for url in a.urls:
+        rec = by_url.get(url)
+        if rec is None or results.get(url):
+            continue
+        vid = vid_id(url)
+        mp4 = os.path.join(media, f'{vid}.mp4')
+        d = rec.get('duration_sec')
+        if rec.get('transcript_status') not in ('SORTFEED', 'TIKTOK_CAPTIONS'):
             try:
                 if whisper is None:
                     from faster_whisper import WhisperModel
@@ -128,9 +196,12 @@ def main():
                 rec['transcript_status'] = 'TRANSCRIPT_MISSING'
                 rec['media_status'] = f'WHISPER_FAILED: {e}'[:200]
         rec.setdefault('media_status', 'OK')
-        if not a.keep_video:
+        if not a.keep_video and os.path.exists(mp4):
             os.remove(mp4)
         print(f"OK {url} | {rec.get('duration_sec')}s | frames {len(rec.get('frames', []))} | {rec['transcript_status']}")
+
+    if a.mosaic:
+        make_mosaics([by_url[u] for u in a.urls if u in by_url and by_url[u].get('contact_sheet')], a.work_dir)
 
     json.dump(data, open(a.records, 'w', encoding='utf8'), ensure_ascii=False, indent=1)
 

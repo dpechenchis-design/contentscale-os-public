@@ -11,8 +11,9 @@
    > Встанови ContentSCALE: запусти `sh ~/Downloads/contentscale-os-public-main/install.sh`
    Claude скопіює скіли в `~/.claude/skills`, агента якості в `~/.claude/agents`, команди `/contentscale` і `/cs-status` в `~/.claude/commands` і налаштує інструменти. Скіли з такими самими назвами, які вже були, збережуться в `~/.claude/skills/.backup-<дата>/`.
 4. Один раз поставити відео-інструменти: `brew install yt-dlp ffmpeg`.
-5. Підключити конектори Claude: **Fathom, Notion, Canva** і **Claude in Chrome** (Instagram збирається через Chrome, де CM залогінений в Instagram). SortFeed Pro — запасний варіант.
-6. Перезапустити Claude Code.
+5. Підключити конектори Claude: **Fathom, Notion, Canva**, **SortFeed** і **Claude in Chrome**.
+6. Для Instagram: встановити розширення **SortFeed** у свій браузер (sortfeed.com), увійти командним Pro-акаунтом і в Instagram, тримати відкрите вікно браузера. Без цього Instagram збирається повільнішим запасним способом. Деталі: `skills/cs-content-research/references/sortfeed_setup.md`.
+7. Перезапустити Claude Code.
 
 **Оновлення:** скачати свіжий ZIP і знову попросити Claude запустити `install.sh`.
 
@@ -28,7 +29,7 @@
 |---|---|
 | `skills/cs-pipeline` | Автопілот, статус клієнта, runbook, **brain/** (рішення команди, quality bar, правила Head of Content, заборонені фрази, SOP) |
 | `skills/cs-client-context` | Етап 1: факти з Unpacking з джерелами, Working Model, досьє, перевірка цитат |
-| `skills/cs-content-research` | Етап 2: TikTok автоматично (yt-dlp), Instagram через браузер, правило 2×, Type за кадрами, транскрипти локально (Whisper) |
+| `skills/cs-content-research` | Етап 2: TikTok автоматично (yt-dlp), Instagram через SortFeed (запасний — браузер), правило 2× з винятком, Type за кадрами, транскрипти (субтитри TikTok / Whisper) |
 | `skills/cs-content-strategy` | Етап 3: стратегія в Canva з майстра (з резервами) |
 | `skills/cs-two-week-calendar` | Етап 4: календар у Notion, format guides, 18 regression-тестів |
 | `skills/cs-post-writer` | Один пост: Talking head, BTS, Carousel, Expert video, caption |

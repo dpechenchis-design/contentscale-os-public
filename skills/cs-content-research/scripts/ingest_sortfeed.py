@@ -130,6 +130,7 @@ def to_record(row, src_file):
 
 
 MIN_PASSING = 5
+MAX_EXCEPTIONS = 10  # strongest candidates per account shown to the CM
 
 
 def main(exports_dir, accounts_csv, out_json, ratio=2.0, outlier=3.0):
@@ -188,8 +189,10 @@ def main(exports_dir, accounts_csv, out_json, ratio=2.0, outlier=3.0):
     for r in records:
         k = (r['platform'], r['source_account'])
         passing[k] = passing.get(k, 0) + (r['passes_ratio'] is True)
-    for r in records:
-        if r['passes_ratio'] is not False or passing[(r['platform'], r['source_account'])] >= MIN_PASSING:
+    taken = {}
+    for r in sorted(records, key=lambda r: -(r['views'] or 0)):
+        k = (r['platform'], r['source_account'])
+        if r['passes_ratio'] is not False or passing[k] >= MIN_PASSING or taken.get(k, 0) >= MAX_EXCEPTIONS:
             continue
         v, fo, o = r['views'], r['followers'], r.get('outlier_score')
         if v and fo and v >= fo:
@@ -198,6 +201,8 @@ def main(exports_dir, accounts_csv, out_json, ratio=2.0, outlier=3.0):
         elif o is not None and o >= outlier:
             r['viral_signal'] = 'OUTLIER'
             r['eligibility_reason'] += f'; EXCEPTION: account has < {MIN_PASSING} posts at {ratio:g}x, views >= {outlier:g}x account median (CM decision)'
+        if r['viral_signal']:
+            taken[k] = taken.get(k, 0) + 1
 
     records.sort(key=lambda r: (r['client_or_competitor'] or 'z', r['source_account'], -(r['views'] or 0)))
     meta = {'generated': dt.datetime.now().isoformat(timespec='seconds'), 'ratio_rule': f'views >= {ratio:g} x followers',
